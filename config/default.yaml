@@ -1,0 +1,69 @@
+# MovCap — Default Configuration
+
+cameras:
+  count: 3
+  devices: [0, 1, 2]            # OpenCV device IDs
+  resolution: [1280, 720]
+  fps: 30
+  backend: "any"                 # cv2.CAP_ANY | cv2.CAP_DSHOW | cv2.CAP_MSMF
+
+calibration:
+  charuco_dict: "DICT_6X6_250"
+  charuco_squares_x: 7
+  charuco_squares_y: 5
+  charuco_square_length_m: 0.035 # 35 mm
+  charuco_marker_length_m: 0.026 # 26 mm
+  min_calibration_frames: 30
+  max_reprojection_error_px: 0.5
+
+imu:
+  count: 8
+  baud_rate: 115200
+  sample_rate_hz: 100
+  # Serial ports for each IMU (adjust per system)
+  ports:
+    - "COM3"
+    - "COM4"
+    - "COM5"
+    - "COM6"
+    - "COM7"
+    - "COM8"
+    - "COM9"
+    - "COM10"
+  # Body segment mapping (index → segment name)
+  segment_map:
+    0: "head"
+    1: "chest"
+    2: "waist"
+    3: "left_upper_arm"
+    4: "right_upper_arm"
+    5: "left_forearm"
+    6: "right_forearm"
+    7: "left_thigh"
+
+pose2d:
+  model: "yolo11n-pose.pt"
+  confidence_threshold: 0.5
+  device: "cuda"                 # "cuda" | "cpu"
+
+triangulation:
+  min_views: 2                   # Minimum camera views for triangulation
+  reprojection_threshold_px: 5.0 # Outlier rejection threshold
+
+fusion:
+  type: "ukf"                    # "ukf" | "ekf"
+  process_noise_std: 0.01
+  measurement_noise_std: 0.05
+  imu_weight: 0.3
+
+temporal_filter:
+  type: "savgol"
+  window_length: 7               # Must be odd
+  polyorder: 3
+
+bvh:
+  frame_time: 0.033333           # 30 fps → 1/30 seconds
+
+visualization:
+  enabled: true
+  window_size: [1280, 720]

@@ -1,0 +1,158 @@
+# BVH Skeleton Model Configuration
+# Maps COCO 17-keypoint model to a standard BVH humanoid hierarchy
+
+coco_keypoints:
+  0: "nose"
+  1: "left_eye"
+  2: "right_eye"
+  3: "left_ear"
+  4: "right_ear"
+  5: "left_shoulder"
+  6: "right_shoulder"
+  7: "left_elbow"
+  8: "right_elbow"
+  9: "left_wrist"
+  10: "right_wrist"
+  11: "left_hip"
+  12: "right_hip"
+  13: "left_knee"
+  14: "right_knee"
+  15: "left_ankle"
+  16: "right_ankle"
+
+# BVH hierarchy: name → { parent, offset [x,y,z], channels }
+# Offsets are default skeleton proportions (meters), adjusted per subject
+skeleton:
+  Hips:
+    parent: null
+    offset: [0.0, 0.95, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation, Xposition, Yposition, Zposition]
+    coco_mapping: [11, 12]  # Midpoint of left_hip, right_hip
+
+  Spine:
+    parent: "Hips"
+    offset: [0.0, 0.10, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: null
+
+  Chest:
+    parent: "Spine"
+    offset: [0.0, 0.15, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: null
+
+  Neck:
+    parent: "Chest"
+    offset: [0.0, 0.15, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: null
+
+  Head:
+    parent: "Neck"
+    offset: [0.0, 0.10, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: [0]  # nose
+
+  LeftShoulder:
+    parent: "Chest"
+    offset: [0.15, 0.12, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: [5]  # left_shoulder
+
+  LeftArm:
+    parent: "LeftShoulder"
+    offset: [0.28, 0.0, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: [7]  # left_elbow
+
+  LeftForeArm:
+    parent: "LeftArm"
+    offset: [0.26, 0.0, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: [9]  # left_wrist
+
+  LeftHand:
+    parent: "LeftForeArm"
+    offset: [0.10, 0.0, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: null
+
+  RightShoulder:
+    parent: "Chest"
+    offset: [-0.15, 0.12, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: [6]  # right_shoulder
+
+  RightArm:
+    parent: "RightShoulder"
+    offset: [-0.28, 0.0, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: [8]  # right_elbow
+
+  RightForeArm:
+    parent: "RightArm"
+    offset: [-0.26, 0.0, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: [10]  # right_wrist
+
+  RightHand:
+    parent: "RightForeArm"
+    offset: [-0.10, 0.0, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: null
+
+  LeftUpLeg:
+    parent: "Hips"
+    offset: [0.10, 0.0, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: [11]  # left_hip
+
+  LeftLeg:
+    parent: "LeftUpLeg"
+    offset: [0.0, -0.42, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: [13]  # left_knee
+
+  LeftFoot:
+    parent: "LeftLeg"
+    offset: [0.0, -0.40, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: [15]  # left_ankle
+
+  LeftToe:
+    parent: "LeftFoot"
+    offset: [0.0, 0.0, 0.12]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: null
+
+  RightUpLeg:
+    parent: "Hips"
+    offset: [-0.10, 0.0, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: [12]  # right_hip
+
+  RightLeg:
+    parent: "RightUpLeg"
+    offset: [0.0, -0.42, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: [14]  # right_knee
+
+  RightFoot:
+    parent: "RightLeg"
+    offset: [0.0, -0.40, 0.0]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: [16]  # right_ankle
+
+  RightToe:
+    parent: "RightFoot"
+    offset: [0.0, 0.0, 0.12]
+    channels: [Xrotation, Yrotation, Zrotation]
+    coco_mapping: null
+
+# Segment length constraints (min/max ratios relative to total height)
+segment_constraints:
+  spine_total: [0.25, 0.35]     # Spine+Chest total / height
+  upper_arm: [0.17, 0.20]       # Upper arm / height
+  forearm: [0.15, 0.18]         # Forearm / height
+  thigh: [0.23, 0.27]           # Thigh / height
+  shin: [0.22, 0.26]            # Shin / height

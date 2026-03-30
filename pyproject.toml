@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "movcap"
+version = "0.1.0"
+description = "Visual-Inertial Motion Capture System — 3 cameras + 8 IMUs → BVH"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "ultralytics>=8.3.0",
+    "opencv-python>=4.10.0",
+    "opencv-contrib-python>=4.10.0",
+    "numpy>=1.26.0",
+    "scipy>=1.14.0",
+    "filterpy>=1.4.5",
+    "pyserial>=3.5",
+    "bvhsdk>=0.2.1",
+    "open3d>=0.18.0",
+    "pyyaml>=6.0",
+    "torch>=2.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6.0",
+]
+cpp = [
+    "pybind11>=2.13.0",
+    "cmake>=3.20",
+]
+
+[project.scripts]
+movcap-calibrate = "scripts.calibrate:main"
+movcap-record = "scripts.record:main"
+movcap-process = "scripts.process:main"
+movcap-gui = "scripts.gui:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
