@@ -22,7 +22,8 @@ class JointAngleSolver:
         positions: dict[str, np.ndarray] = {}
         for i, name in enumerate(joint_names):
             if i < len(keypoints_3d):
-                positions[name] = keypoints_3d[i]
+                if not np.any(np.isnan(keypoints_3d[i])):
+                    positions[name] = keypoints_3d[i]
 
         rotations: dict[str, np.ndarray] = {}
 

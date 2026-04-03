@@ -292,26 +292,44 @@ class EnvironmentChecker:
 
     def _check_calibration(self, report: EnvironmentReport) -> None:
         cal_dir = Path("config/calibration")
-        intrinsic = cal_dir / "intrinsic.yaml"
-        extrinsic = cal_dir / "extrinsic.yaml"
+        intrinsic_files = list(cal_dir.glob("intrinsic_cam*.yaml"))
+        extrinsic_files = list(cal_dir.glob("extrinsic_*_*.yaml"))
+        imu_calib = cal_dir / "imu_tpose.yaml"
 
-        if intrinsic.exists() and extrinsic.exists():
+        has_intrinsic = len(intrinsic_files) > 0
+        has_extrinsic = len(extrinsic_files) > 0
+        has_imu_calib = imu_calib.exists()
+
+        if has_intrinsic and has_extrinsic:
             report.has_calibration = True
             report.checks.append(CheckResult(
-                "Calibration", CheckStatus.OK,
-                "Intrinsic + Extrinsic found"
+                "Camera Calibration", CheckStatus.OK,
+                f"Intrinsic ({len(intrinsic_files)}) + Extrinsic ({len(extrinsic_files)}) found"
             ))
-        elif intrinsic.exists():
+        elif has_intrinsic:
+            report.has_calibration = True
             report.checks.append(CheckResult(
-                "Calibration", CheckStatus.WARN,
-                "Only intrinsic calibration found",
-                "Run extrinsic calibration"
+                "Camera Calibration", CheckStatus.WARN,
+                f"Only intrinsic calibration found ({len(intrinsic_files)} cameras)",
+                "Run extrinsic calibration for multi-camera setup"
             ))
         else:
             report.checks.append(CheckResult(
-                "Calibration", CheckStatus.WARN,
-                "No calibration data",
-                "Run calibration first or use demo mode"
+                "Camera Calibration", CheckStatus.WARN,
+                "No camera calibration data",
+                "Run calibration first or use single-camera mode"
+            ))
+
+        if has_imu_calib:
+            report.checks.append(CheckResult(
+                "IMU Calibration", CheckStatus.OK,
+                "T-pose calibration found"
+            ))
+        else:
+            report.checks.append(CheckResult(
+                "IMU Calibration", CheckStatus.WARN,
+                "No IMU T-pose calibration",
+                "Perform T-pose calibration for better IMU fusion"
             ))
 
     def _check_config(self, report: EnvironmentReport) -> None:

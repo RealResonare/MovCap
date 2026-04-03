@@ -4,8 +4,6 @@ import logging
 import time
 from pathlib import Path
 
-import numpy as np
-
 from src.pipeline import MoCapPipeline
 
 logger = logging.getLogger(__name__)
@@ -37,11 +35,27 @@ def main() -> None:
         action="store_true",
         help="Disable real-time visualization",
     )
+    parser.add_argument(
+        "--mode",
+        choices=["visual", "imu", "hybrid"],
+        default="hybrid",
+        help="Fusion mode: visual-only, imu-only, or hybrid (default: hybrid)",
+    )
 
     args = parser.parse_args()
 
+    cal_dir = args.calibration
+    cal_path = Path(cal_dir)
+    has_calibration = cal_path.is_dir() and any(cal_path.glob("intrinsic_cam*.yaml"))
+
+    if not has_calibration:
+        logger.warning("No calibration data found at %s", cal_dir)
+        logger.warning("Running without calibration - quality will be reduced")
+        cal_dir = None
+
     pipeline = MoCapPipeline(args.config)
-    pipeline.initialize(calibration_dir=args.calibration)
+    pipeline.initialize(calibration_dir=cal_dir)
+    pipeline.set_mode(args.mode)
 
     num_frames = int(args.duration * 30) if args.duration > 0 else 0
 
@@ -83,6 +97,9 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pipeline.export_bvh(output_path)
     logger.info("BVH saved: %s (%d frames)", output_path, pipeline.bvh_frame_count)
+
+    if not has_calibration:
+        logger.warning("BVH quality: LOW (no calibration data)")
 
     raw_path = output_path.with_suffix(".json")
     with open(raw_path, "w") as f:

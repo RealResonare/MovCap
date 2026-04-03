@@ -1,6 +1,5 @@
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -45,7 +44,7 @@ class Pose2D:
 
 
 class Pose2DEstimator:
-    def __init__(self, config_path: str = "config/default.yaml") -> None:
+    def __init__(self, config_path: str = "config/default.yaml", device: Optional[str] = None) -> None:
         if YOLO is None:
             raise ImportError("ultralytics is required: pip install ultralytics")
 
@@ -54,7 +53,24 @@ class Pose2DEstimator:
 
         pose_cfg = cfg["pose2d"]
         self._confidence_threshold = pose_cfg["confidence_threshold"]
-        self._device = pose_cfg["device"]
+
+        if device is not None:
+            self._device = device
+        else:
+            requested = pose_cfg["device"]
+            if requested == "cuda":
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        self._device = "cuda"
+                    else:
+                        logger.warning("CUDA not available, falling back to CPU")
+                        self._device = "cpu"
+                except ImportError:
+                    self._device = "cpu"
+            else:
+                self._device = requested
+
         self._model = YOLO(pose_cfg["model"])
 
     @property
@@ -90,11 +106,17 @@ class Pose2DEstimator:
             boxes = result.boxes.data.cpu().numpy()
 
             for i, (kpts_person, box) in enumerate(zip(kpts, boxes)):
-                if kpts_person.shape[0] < NUM_KEYPOINTS:
-                    continue
-                xy = kpts_person[:, :2]
-                conf = kpts_person[:, 2]
+                xy = np.full((NUM_KEYPOINTS, 2), np.nan, dtype=np.float64)
+                conf = np.zeros(NUM_KEYPOINTS, dtype=np.float64)
+
+                num_detected = min(kpts_person.shape[0], NUM_KEYPOINTS)
+                xy[:num_detected] = kpts_person[:num_detected, :2]
+                conf[:num_detected] = kpts_person[:num_detected, 2]
+
                 bbox = box[:4]
+
+                if np.all(np.isnan(xy)):
+                    continue
 
                 poses.append(
                     Pose2D(

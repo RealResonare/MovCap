@@ -1,8 +1,6 @@
 import tkinter as tk
-from typing import Optional
 
 import numpy as np
-
 
 SKELETON_CONNECTIONS = [
     (0, 1), (1, 2), (2, 3), (3, 4),
@@ -51,7 +49,7 @@ class SkeletonCanvas:
         self._canvas.pack(fill=tk.BOTH, expand=True)
 
         self._label = tk.Label(
-            self._frame, text="No data", bg="#1a1a2e", fg="#666688",
+            self._frame, text="无数据", bg="#1a1a2e", fg="#666688",
             font=("Consolas", 9)
         )
         self._label.pack(side=tk.BOTTOM, fill=tk.X)
@@ -100,11 +98,14 @@ class SkeletonCanvas:
         else:
             return
 
-        if xy.shape[0] < 17:
+        valid_mask = ~np.isnan(xy[:, 0]) & ~np.isnan(xy[:, 1])
+
+        if not np.any(valid_mask):
             return
 
-        x_range = np.ptp(xy[:, 0]) if np.ptp(xy[:, 0]) > 0.01 else 1.0
-        y_range = np.ptp(xy[:, 1]) if np.ptp(xy[:, 1]) > 0.01 else 1.0
+        valid_xy = xy[valid_mask]
+        x_range = np.ptp(valid_xy[:, 0]) if np.ptp(valid_xy[:, 0]) > 0.01 else 1.0
+        y_range = np.ptp(valid_xy[:, 1]) if np.ptp(valid_xy[:, 1]) > 0.01 else 1.0
 
         margin = 60
         scale = min(
@@ -112,27 +113,34 @@ class SkeletonCanvas:
             (self._height - 2 * margin) / y_range
         ) * 0.8
 
-        cx = (np.min(xy[:, 0]) + np.max(xy[:, 0])) / 2
-        cy = (np.min(xy[:, 1]) + np.max(xy[:, 1])) / 2
+        cx = (np.min(valid_xy[:, 0]) + np.max(valid_xy[:, 0])) / 2
+        cy = (np.min(valid_xy[:, 1]) + np.max(valid_xy[:, 1])) / 2
 
         sx = self._width / 2 + (xy[:, 0] - cx) * scale
         sy = self._height / 2 - (xy[:, 1] - cy) * scale
 
         for pair, item in self._bone_items.items():
             i, j = pair
-            if i < len(sx) and j < len(sx):
+            if i < len(sx) and j < len(sx) and valid_mask[i] and valid_mask[j]:
                 self._canvas.coords(item, sx[i], sy[i], sx[j], sy[j])
+                self._canvas.itemconfig(item, state="normal")
+            else:
+                self._canvas.itemconfig(item, state="hidden")
 
         for i, item in enumerate(self._joint_items):
-            if i < len(sx):
+            if i < len(sx) and valid_mask[i]:
                 r = JOINT_RADIUS
                 self._canvas.coords(item, sx[i] - r, sy[i] - r, sx[i] + r, sy[i] + r)
+                self._canvas.itemconfig(item, state="normal")
+            else:
+                self._canvas.itemconfig(item, state="hidden")
 
-        self._label.config(text=f"Frame: {frame_num}")
+        detected = int(np.sum(valid_mask))
+        self._label.config(text=f"帧: {frame_num} | 关键点: {detected}/17")
 
     def clear(self) -> None:
         for item in self._bone_items.values():
             self._canvas.coords(item, 0, 0, 0, 0)
         for item in self._joint_items:
             self._canvas.coords(item, 0, 0, 0, 0)
-        self._label.config(text="No data")
+        self._label.config(text="无数据")

@@ -21,6 +21,16 @@ def collect_calibration_frames(
     camera_frames: dict[int, list] = {}
     start_time = time.time()
 
+    print("=" * 50)
+    print("摄像头标定 - ChArUco棋盘格标定法")
+    print("=" * 50)
+    print("\n标定步骤：")
+    print("  1. 将 ChArUco 标定板放在摄像头前方")
+    print("  2. 缓慢移动标定板，覆盖画面各个区域")
+    print("  3. 倾斜、旋转标定板以捕捉不同角度")
+    print("  4. 对于外参标定，确保标定板同时被")
+    print("     多个摄像头看到")
+    print("  5. 按 'q' 可提前结束\n")
     print(f"Collecting calibration frames for {duration_s}s...")
     print("Move the ChArUco board in front of all cameras.")
     print("Press 'q' to stop early.\n")

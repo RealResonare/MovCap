@@ -31,6 +31,17 @@ class Pose3DReconstructor:
         self._camera_matrices: dict[int, np.ndarray] = {}
         self._dist_coeffs: dict[int, np.ndarray] = {}
 
+        self._default_bone_lengths: dict[tuple[int, int], float] = {
+            (5, 7): 0.28, (7, 9): 0.26,
+            (6, 8): 0.28, (8, 10): 0.26,
+            (5, 11): 0.45, (6, 12): 0.45,
+            (11, 13): 0.42, (13, 15): 0.40,
+            (12, 14): 0.42, (14, 16): 0.40,
+            (0, 5): 0.15, (0, 6): 0.15,
+            (5, 6): 0.30, (11, 12): 0.20,
+        }
+        self._focal_length_hint: float = 800.0
+
     @property
     def keypoint_names(self) -> list[str]:
         return COCO_KEYPOINTS
@@ -81,7 +92,7 @@ class Pose3DReconstructor:
                     pt = pose.keypoints[j]
                     c = pose.confidence[j]
 
-                    if c < 0.3:
+                    if c < 0.3 or np.any(np.isnan(pt)):
                         continue
 
                     pts_2d.append(pt)
@@ -194,3 +205,106 @@ class Pose3DReconstructor:
                 groups.append(group)
 
         return groups
+
+    def lift_2d_to_3d(
+        self,
+        poses_2d: dict[int, list[Pose2D]],
+    ) -> list[Pose3D]:
+        camera_ids = sorted(poses_2d.keys())
+        if not camera_ids:
+            return []
+
+        cam_id = camera_ids[0]
+        poses = poses_2d.get(cam_id, [])
+        if not poses:
+            return []
+
+        all_poses_3d: list[Pose3D] = []
+
+        for pose in poses:
+            kpts_2d = pose.keypoints
+            conf = pose.confidence.copy()
+
+            valid = ~np.isnan(kpts_2d[:, 0]) & (conf > 0.3)
+            if np.sum(valid) < 5:
+                continue
+
+            scale_factor = self._estimate_scale(kpts_2d, valid)
+            if scale_factor <= 0:
+                scale_factor = 1.0
+
+            depth = self._focal_length_hint * 1.7 / scale_factor
+
+            kpts_3d = np.full((NUM_KEYPOINTS, 3), np.nan, dtype=np.float64)
+            reproj_errors = np.full(NUM_KEYPOINTS, np.inf)
+
+            cx = np.nanmean(kpts_2d[valid, 0])
+            cy = np.nanmean(kpts_2d[valid, 1])
+
+            for j in range(NUM_KEYPOINTS):
+                if not valid[j]:
+                    continue
+
+                x = (kpts_2d[j, 0] - cx) * depth / self._focal_length_hint
+                y = -(kpts_2d[j, 1] - cy) * depth / self._focal_length_hint
+                z = depth
+
+                kpts_3d[j] = [x, y, z]
+                reproj_errors[j] = 0.0
+
+            kpts_3d = self._refine_bone_lengths(kpts_3d, valid)
+
+            all_poses_3d.append(
+                Pose3D(
+                    keypoints_3d=kpts_3d,
+                    confidence=conf,
+                    reprojection_errors=reproj_errors,
+                )
+            )
+
+        return all_poses_3d
+
+    def _estimate_scale(
+        self, kpts_2d: np.ndarray, valid: np.ndarray
+    ) -> float:
+        max_dist = 0.0
+
+        pair_indices = [
+            (5, 11), (6, 12), (5, 7), (7, 9),
+            (6, 8), (8, 10), (11, 13), (13, 15),
+            (12, 14), (14, 16), (0, 5), (0, 6),
+        ]
+
+        for i, j in pair_indices:
+            if valid[i] and valid[j]:
+                dist = np.linalg.norm(kpts_2d[i] - kpts_2d[j])
+                if dist > max_dist:
+                    max_dist = dist
+
+        return max_dist
+
+    def _refine_bone_lengths(
+        self, kpts_3d: np.ndarray, valid: np.ndarray
+    ) -> np.ndarray:
+        refined = kpts_3d.copy()
+
+        for _ in range(3):
+            for (i, j), target_len in self._default_bone_lengths.items():
+                if not (valid[i] and valid[j]):
+                    continue
+
+                vec = refined[j] - refined[i]
+                current_len = np.linalg.norm(vec)
+                if current_len < 1e-6:
+                    continue
+
+                ratio = target_len / current_len
+                correction = (1.0 - ratio) * 0.5
+
+                direction = vec / current_len
+                midpoint = (refined[i] + refined[j]) / 2.0
+
+                refined[i] = midpoint - direction * target_len * 0.5
+                refined[j] = midpoint + direction * target_len * 0.5
+
+        return refined

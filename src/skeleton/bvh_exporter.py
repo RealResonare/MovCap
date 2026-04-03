@@ -23,6 +23,8 @@ class BVHExporter:
         self._skeleton = skeleton
         self._frame_time = frame_time
         self._motion_data: list[dict[str, np.ndarray]] = []
+        self._quality: str = "high"
+        self._quality_notes: list[str] = []
 
     @property
     def frame_count(self) -> int:
@@ -36,6 +38,12 @@ class BVHExporter:
 
     def clear(self) -> None:
         self._motion_data.clear()
+
+    def set_quality(self, quality: str, notes: Optional[list[str]] = None) -> None:
+        if quality not in ("high", "medium", "low"):
+            raise ValueError(f"Invalid quality: {quality}. Must be 'high', 'medium', or 'low'")
+        self._quality = quality
+        self._quality_notes = notes or []
 
     def export(self, output_path: str | Path) -> None:
         if BVH is None:
@@ -134,6 +142,10 @@ class BVHExporter:
 
         with open(output_path, "w") as f:
             f.write("HIERARCHY\n")
+            if self._quality != "high":
+                f.write(f"// Quality: {self._quality}\n")
+                for note in self._quality_notes:
+                    f.write(f"// {note}\n")
             self._write_hierarchy(f, self._skeleton.root, 0)
             f.write("MOTION\n")
             f.write(f"Frames: {len(self._motion_data)}\n")

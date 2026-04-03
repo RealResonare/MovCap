@@ -1,5 +1,4 @@
 import logging
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -7,18 +6,19 @@ import numpy as np
 import yaml
 
 from .acquisition.camera_manager import CameraManager
-from .acquisition.imu_manager import IMUManager, IMUData
-from .acquisition.synchronizer import StreamSynchronizer, SyncedSample
-from .calibration.intrinsic_calib import IntrinsicCalibrator
+from .acquisition.imu_manager import IMUData, IMUManager
+from .acquisition.synchronizer import StreamSynchronizer
 from .calibration.extrinsic_calib import ExtrinsicCalibrator
-from .pose.pose2d_estimator import Pose2DEstimator, COCO_KEYPOINTS, NUM_KEYPOINTS
-from .pose.pose3d_reconstructor import Pose3DReconstructor, Pose3D
+from .calibration.intrinsic_calib import IntrinsicCalibrator
+from .calibration.imu_calib import IMUTPoseCalibrator
 from .fusion.imu_preprocessor import IMUPreprocessor, ProcessedIMU
-from .fusion.ukf_fusion import VisualIMUFusion, FusedPose
 from .fusion.temporal_filter import TemporalFilter
-from .skeleton.skeleton_model import SkeletonModel
-from .skeleton.joint_angle_solver import JointAngleSolver
+from .fusion.ukf_fusion import FusedPose, VisualIMUFusion
+from .pose.pose2d_estimator import COCO_KEYPOINTS, Pose2DEstimator
+from .pose.pose3d_reconstructor import Pose3DReconstructor
 from .skeleton.bvh_exporter import BVHExporter
+from .skeleton.joint_angle_solver import JointAngleSolver
+from .skeleton.skeleton_model import SkeletonModel
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +72,11 @@ class MoCapPipeline:
 
         self._intrinsics: Optional[IntrinsicCalibrator] = None
         self._extrinsics: Optional[ExtrinsicCalibrator] = None
+        self._imu_calibrator: Optional[IMUTPoseCalibrator] = None
 
         self._running = False
         self._frame_count = 0
+        self._mode: str = "hybrid"
 
     def load_calibration(self, calibration_dir: str | Path) -> None:
         cal_dir = Path(calibration_dir)
@@ -85,9 +87,12 @@ class MoCapPipeline:
         self._extrinsics = ExtrinsicCalibrator(self._config_path)
         self._extrinsics.load(cal_dir)
 
-        self._pose3d = Pose3DReconstructor(self._config_path)
-
         camera_ids = sorted(self._intrinsics.calibrations.keys())
+        if not camera_ids:
+            logger.warning("No calibration data found in %s, skipping", cal_dir)
+            return
+
+        self._pose3d = Pose3DReconstructor(self._config_path)
         ref_id = camera_ids[0]
 
         projs = self._extrinsics.get_projection_matrices(
@@ -100,6 +105,9 @@ class MoCapPipeline:
                 self._pose3d.set_camera_params(
                     cam_id, projs[cam_id], cal.camera_matrix, cal.dist_coeffs
                 )
+
+        self._imu_calibrator = IMUTPoseCalibrator(self._config_path)
+        self._imu_calibrator.load(cal_dir)
 
     def initialize(self, calibration_dir: Optional[str | Path] = None) -> None:
         self._camera_manager = CameraManager(self._config_path)
@@ -119,6 +127,9 @@ class MoCapPipeline:
 
         if calibration_dir is not None:
             self.load_calibration(calibration_dir)
+
+        if self._pose3d is None:
+            self._pose3d = Pose3DReconstructor(self._config_path)
 
     def start(self) -> None:
         if self._camera_manager is not None:
@@ -142,10 +153,15 @@ class MoCapPipeline:
             logger.warning("Pipeline not initialized: fusion or temporal_filter is None")
             return None
 
-        frames = self._camera_manager.read(timeout_ms=2000)
+        use_visual = self._mode in ("visual", "hybrid")
+        use_imu = self._mode in ("imu", "hybrid")
+
+        frames: dict[int, Optional] = {}
+        if use_visual:
+            frames = self._camera_manager.read(timeout_ms=2000)
 
         imu_data: dict[int, Optional[IMUData]] = {}
-        if self._imu_manager is not None:
+        if use_imu and self._imu_manager is not None:
             imu_data = self._imu_manager.read_all(timeout_ms=100)
 
         for cam_id, frame in frames.items():
@@ -162,21 +178,38 @@ class MoCapPipeline:
 
         poses_2d: dict[int, list] = {}
 
-        for cam_id, frame in sample.frames.items():
-            if frame is not None and self._pose2d is not None:
-                poses = self._pose2d.estimate(frame.image)
-                poses_2d[cam_id] = poses
+        if use_visual:
+            for cam_id, frame in sample.frames.items():
+                if frame is not None and self._pose2d is not None:
+                    poses = self._pose2d.estimate(frame.image)
+                    poses_2d[cam_id] = poses
 
         pose_3d = None
-        if self._pose3d is not None and len(poses_2d) >= 2:
-            pose_3d_list = self._pose3d.triangulate(poses_2d)
-            if pose_3d_list:
-                pose_3d = pose_3d_list[0]
+        if use_visual and self._pose3d is not None:
+            if len(poses_2d) >= 2:
+                pose_3d_list = self._pose3d.triangulate(poses_2d)
+                if pose_3d_list:
+                    pose_3d = pose_3d_list[0]
+            elif len(poses_2d) == 1:
+                pose_3d_list = self._pose3d.lift_2d_to_3d(poses_2d)
+                if pose_3d_list:
+                    pose_3d = pose_3d_list[0]
 
         processed_imu: dict[int, ProcessedIMU] = {}
-        if self._imu_preprocessor is not None:
+        if use_imu and self._imu_preprocessor is not None:
             for sid, data in sample.imu_data.items():
                 if data is not None:
+                    if self._imu_calibrator is not None and self._imu_calibrator.is_calibrated:
+                        corrected_quat = self._imu_calibrator.apply_calibration(
+                            sid, data.quaternion
+                        )
+                        data = IMUData(
+                            sensor_id=data.sensor_id,
+                            timestamp_ns=data.timestamp_ns,
+                            quaternion=corrected_quat,
+                            linear_accel=data.linear_accel,
+                            angular_vel=data.angular_vel,
+                        )
                     p = self._imu_preprocessor.process(data)
                     if p is not None:
                         processed_imu[sid] = p
@@ -252,7 +285,45 @@ class MoCapPipeline:
     def export_bvh(self, output_path: str | Path) -> None:
         if self._bvh_exporter is None:
             raise RuntimeError("Pipeline not initialized: call initialize() first")
+        self._update_bvh_quality()
         self._bvh_exporter.export_raw(output_path)
+
+    def _update_bvh_quality(self) -> None:
+        if self._bvh_exporter is None:
+            return
+
+        quality = "high"
+        notes: list[str] = []
+
+        has_camera_calib = (
+            self._intrinsics is not None
+            and len(self._intrinsics.calibrations) > 0
+        )
+        has_imu_calib = self.has_imu_calibration
+
+        if not has_camera_calib:
+            quality = "low"
+            notes.append("No camera calibration - monocular estimation used")
+        elif self._extrinsics is None or len(self._extrinsics.stereo_results) == 0:
+            if quality == "high":
+                quality = "medium"
+            notes.append("No extrinsic calibration - single camera mode")
+
+        if not has_imu_calib:
+            if quality == "high":
+                quality = "medium"
+            notes.append("No IMU T-pose calibration - using raw IMU data")
+
+        num_connected_cams = 0
+        if self._camera_manager is not None:
+            num_connected_cams = len(self._camera_manager.connected_devices)
+
+        if num_connected_cams < 2:
+            if quality == "high":
+                quality = "medium"
+            notes.append(f"Single camera mode ({num_connected_cams} camera)")
+
+        self._bvh_exporter.set_quality(quality, notes)
 
     @property
     def skeleton(self) -> Optional[SkeletonModel]:
@@ -265,6 +336,26 @@ class MoCapPipeline:
     @property
     def bvh_frame_count(self) -> int:
         return self._bvh_exporter.frame_count if self._bvh_exporter else 0
+
+    @property
+    def mode(self) -> str:
+        return self._mode
+
+    @property
+    def imu_calibrator(self) -> Optional[IMUTPoseCalibrator]:
+        return self._imu_calibrator
+
+    @property
+    def has_imu_calibration(self) -> bool:
+        return (
+            self._imu_calibrator is not None
+            and self._imu_calibrator.is_calibrated
+        )
+
+    def set_mode(self, mode: str) -> None:
+        if mode not in ("visual", "imu", "hybrid"):
+            raise ValueError(f"Invalid mode: {mode}. Must be 'visual', 'imu', or 'hybrid'")
+        self._mode = mode
 
     def __enter__(self) -> "MoCapPipeline":
         self.start()

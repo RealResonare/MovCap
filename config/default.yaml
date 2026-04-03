@@ -5,7 +5,16 @@ cameras:
   devices: [0, 1, 2]            # OpenCV device IDs
   resolution: [1280, 720]
   fps: 30
-  backend: "any"                 # cv2.CAP_ANY | cv2.CAP_DSHOW | cv2.CAP_MSMF
+  backend: "dshow"               # cv2.CAP_DSHOW (Windows) | cv2.CAP_ANY | cv2.CAP_MSMF
+  device_type: "usb"             # "usb" | "fpga"
+
+  # FPGA backend (set device_type: "fpga" to enable)
+  # fpga:
+  #   host: "192.168.1.100"
+  #   port: 4660
+  #   protocol: "tcp"            # "tcp" | "udp" | "pcie"
+  #   channels: [0, 1, 2]        # FPGA channel indices
+  #   pixel_format: "bgr24"
 
 calibration:
   charuco_dict: "DICT_6X6_250"
