@@ -179,6 +179,18 @@ pytest tests/ -v
 
 ---
 
+## FPGA Kalman Filter IP
+
+本仓库还包含一个面向 Xilinx Artix-7 的 FPGA 卡尔曼滤波 Verilog IP 原型，用于将滤波计算映射为固定点、多周期 MAC 和 AXI-Lite/AXI-Stream 接口。
+
+- 使用说明：[docs/fpga_kalman_readme.md](docs/fpga_kalman_readme.md)
+- 结项技术说明：[docs/technical_report.md](docs/technical_report.md)
+- RTL：`rtl/`
+- 仿真：`make sim`
+- Yosys Artix-7 综合：`make yosys-artix7`
+
+---
+
 ## 依赖
 
 | 包 | 用途 |
