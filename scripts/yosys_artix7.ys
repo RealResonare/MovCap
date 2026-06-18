@@ -1,0 +1,11 @@
+read_verilog rtl/fixed_mul.v
+read_verilog rtl/fixed_div_iter.v
+read_verilog rtl/kalman_filter_matrix.v
+read_verilog rtl/kalman_filter_axi.v
+
+hierarchy -top kalman_filter_axi
+synth_xilinx -family xc7 -top kalman_filter_axi
+stat
+
+write_verilog -noattr build/kalman_filter_axi_artix7_synth.v
+write_json build/kalman_filter_axi_artix7_synth.json
