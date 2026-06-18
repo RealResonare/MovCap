@@ -1,0 +1,16 @@
+build/
+.DS_Store
+*.jou
+*.log
+*.pb
+*.str
+*.wdb
+*.vcd
+*.vvp
+*.runs/
+*.cache/
+*.hw/
+*.ip_user_files/
+*.sim/
+*.srcs/
+*.xpr
